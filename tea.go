@@ -248,8 +248,8 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 	return p
 }
 
-// Start initializes the program.
-func (p *Program) Start() error {
+// Start initializes the program. Return the final model
+func (p *Program) StartM() (Model, error) {
 	p.msgs = make(chan Msg)
 
 	var (
@@ -290,7 +290,7 @@ func (p *Program) Start() error {
 		// Open a new TTY, by request
 		f, err := openInputTTY()
 		if err != nil {
-			return err
+			return p.initialModel, err
 		}
 
 		defer f.Close() // nolint:errcheck
@@ -313,7 +313,7 @@ func (p *Program) Start() error {
 
 		f, err := openInputTTY()
 		if err != nil {
-			return err
+			return p.initialModel, err
 		}
 
 		defer f.Close() // nolint:errcheck
@@ -354,7 +354,7 @@ func (p *Program) Start() error {
 	// Check if output is a TTY before entering raw mode, hiding the cursor and
 	// so on.
 	if err := p.initTerminal(); err != nil {
-		return err
+		return p.initialModel, err
 	}
 
 	// If no renderer is set use the standard one.
@@ -395,7 +395,7 @@ func (p *Program) Start() error {
 
 	cancelReader, err := newCancelReader(p.input)
 	if err != nil {
-		return err
+		return model, err
 	}
 
 	defer cancelReader.Close() // nolint:errcheck
@@ -483,7 +483,7 @@ func (p *Program) Start() error {
 			waitForGoroutines(cancelReader.Cancel())
 			p.shutdown(false)
 
-			return err
+			return model, err
 		case msg := <-p.msgs:
 
 			// Handle special internal messages
@@ -492,7 +492,7 @@ func (p *Program) Start() error {
 				cancelContext()
 				waitForGoroutines(cancelReader.Cancel())
 				p.shutdown(false)
-				return nil
+				return model, nil
 
 			case batchMsg:
 				for _, cmd := range msg {
@@ -534,6 +534,12 @@ func (p *Program) Start() error {
 			p.renderer.write(model.View()) // send view to renderer
 		}
 	}
+}
+
+// Start initializes the program. Ignore the final model
+func (p *Program) Start() error {
+	_, err := p.StartM()
+	return err
 }
 
 // Send sends a message to the main update function, effectively allowing
